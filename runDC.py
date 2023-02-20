@@ -25,7 +25,7 @@ dataLink = {
     "sampleInfo":'data/sampleListPCAannot.csv.zip',
     "degStim_adju":'data/DEG_stim_adjuvent.csv.zip',
     "modularTranscript":'data/DC_moduleChange.csv.zip',
-    "dcModulesDef":'data/dcNormModules.csv.zip'
+    "dcModulesDef":'data/dcNormModules.csv.zip',
 }
 
 def plotResponsiveness(fc_individual, cutoff):
@@ -96,57 +96,91 @@ with grpDEG:
 
     #### DEGs in Old Vs Young 
     Batch adjusted normalised expression profile for each stimulation condition used to extract DEGs among Old and Young samples. Each 
-    sample group has 5 samples (data points), we used edgeR and limma pakage in R to estimate Log fold change for each gene , a FDR of 0.05 has been set to filter
-    genes that were significant difference in two age groups.
+    sample group has 5 samples (data points), we used edgeR and limma pakage in R to estimate Log fold change for each gene.
+    ##### Previous version filter with FDR #####
+    FDR of 0.05 has been set to filter genes that were significant difference in two age groups.
 
     In brief, we observed very low number of gene with differential expression profile among samples grouped by Age groups. From all 8 stimulation, we found 89 DEGs 
     genes that observed to have different experssion with a FDR of 0.05. The low number of DEG indicates that samples grouped with Age Group (Old/Young) do not have any 
     major difference in DC proliferation. This is true across all stimulaiton condition. Another probable cause might be the higer sample heterogenity, hence grouping with
     a Age phenotype, DEGs technique can not pick up genes with resulting in cDC differentiation.
 
-    Following are list of gene that have FDR < 0.05 . Columns have treatment wise difference in Old to Young samples.
+    ##### Filtering with P-value : less stringent #####
+    1. select stimulaiton condition 
+    2. Use the slider to choose P-value 
+    3. If immune geens re present select radio 
+    4. Download DEGs with normalized expression profile 
+    5. See Heatmap of z-score of normalized expresison value 
+    6. Vizualize normalized expressin of selected gene as boxplot  
     """)
-
-    deg_age = pd.read_csv("data/AgeGroup_DEG_FC.csv.gz",compression="gzip").set_index("Unnamed: 0")
-    pval_age= pd.read_csv("data/AgeGroup_DEG_pval.csv.gz",compression="gzip").set_index("Unnamed: 0")
+    @st.cache(suppress_st_warning=True)
+    def dataDEG_ageGroup():
+        deg_age = pd.read_csv("data/AgeGroup_DEG_FC.csv.gz",compression="gzip").set_index("Unnamed: 0")
+        pval_age= pd.read_csv("data/AgeGroup_DEG_Pval.csv.gz",compression="gzip").set_index("Unnamed: 0")
+        immuneGenes = pd.read_csv("data/immoGenes.csv.gz",compression="gzip")
+        return deg_age, pval_age, immuneGenes
+    
+    deg_age, pval_age, immuneGenes = dataDEG_ageGroup()
     # st.caption("Table : DEG table for each stimulation tested for Age Groups (significant @ FDR < 0.05)")
     # st.write(deg_age)
     st.subheader("Select a stimulaiton to see DEGs and sample expression")
     deg1_stim = st.selectbox("Select stimulation condition: ", list(deg_age.columns))
     df_stim1_pval = pval_age[deg1_stim+"_pval"].dropna()
     histfig, hax = plt.subplots(figsize=(5,3))
-    df_stim1_pval.plot(kind="hist", ax= hax)
+    # df_stim1_pval.plot(kind="hist", ax= hax)
+    hax.hist(df_stim1_pval.values, 20, cumulative=True)
     plt.xlabel("P-value")
     plt.ylabel("Number of DEGs Filtered")
     st.pyplot(histfig)
 
-    pval_filter = st.slider("Select P-value cut-off", min_value=df_stim1_pval.min()+0.01,max_value=df_stim1_pval.max(),value=0.05)
+    pval_filter = st.slider("Select P-value cut-off", min_value=df_stim1_pval.min()+0.001,max_value=df_stim1_pval.max(),value=0.05, step=0.001)
     deg_age_stimfilter = deg_age.loc[df_stim1_pval[df_stim1_pval<=pval_filter].index][deg1_stim]
     if deg_age_stimfilter.shape[0]>3:
         st.write("Total DEG [for Age Groups] in stim {} with Pvalue <= {} : {}".format(deg1_stim, pval_filter, deg_age_stimfilter.shape[0]))
+        _immSubset = list(set(deg_age_stimfilter.index).intersection(set(immuneGenes.Symbol)))
+        if len(_immSubset):
+            immsubsetDF = deg_age_stimfilter.loc[_immSubset]
+            st.write("Select DEG has {} Immune Genes ".format(len(_immSubset)))
+        else:
+            st.write("No immune related genes found")
+
+        _sampleSelect = sampleInfo[sampleInfo.condition==deg1_stim].sort_values(by='Age',ascending=False).set_index('sname')
+        df_count_PT = normCount[_sampleSelect.index].loc[deg_age_stimfilter.index]
+        st.subheader("Download expression profile:")
+        flname = "normExpr_{}_{}_{}.csv".format(deg1_stim, pval_filter, df_count_PT.shape[0])
+        filelink = get_table_download_link(df_count_PT,flname)
+        st.markdown(filelink,unsafe_allow_html=True)
+
+        st.caption("Heat map for selected DEG : {} [samples from Old (left) to Young (right)]".format(deg1_stim))
+        _allName = "ALL [{}]".format(df_count_PT.shape[0])
+        _immName = "Immune [{}]".format(len(_immSubset))
+        glistview = st.radio("Select ALL/ Immune related genes", (_allName,_immName))
+
+        if ((glistview == _immName) & (len(_immSubset)>3)):
+            hm_ageG = sns.clustermap(df_count_PT.loc[_immSubset].apply(sT.zscore,axis=1),cmap='RdBu_r',figsize=(6,10),vmin=-1.5,vmax=1.5,col_cluster=False,
+                    cbar_kws={'label':'normalized experssion (z-score)'},cbar_pos=[1.,0.5,0.05,0.1])
+            st.pyplot(hm_ageG)
+        else:
+            hm_ageG = sns.clustermap(df_count_PT.apply(sT.zscore,axis=1),cmap='RdBu_r',figsize=(6,10),vmin=-1.5,vmax=1.5,col_cluster=False,
+                    cbar_kws={'label':'normalized experssion (z-score)'},cbar_pos=[1.,0.5,0.05,0.1])
+            st.pyplot(hm_ageG)
+       # boxplot for each gene
+        df_count = df_count_PT.unstack().reset_index().rename({0:'normExpr_val','Unnamed: 0':'gene','level_0':'sampleName'},axis=1)
+        df_count = df_count.set_index('sampleName').join(_sampleSelect[['Age','Age_Group']]).reset_index()
+        deggene_select = st.selectbox("Gene from DEGs to see as a boxplot on Normalized expression", df_count.gene.unique())
+        gxpr_stim, gbox_stim = plt.subplots()
+        PROPS = {
+       'boxprops':{'edgecolor':'None'},
+            }
+        sns.boxplot(x='Age_Group',y='normExpr_val',data=df_count[df_count.gene==deggene_select],\
+                palette=['#bdbdbd','#636363'], ax= gbox_stim, **PROPS)
+        sns.stripplot(x='Age_Group',y='normExpr_val',data=df_count[df_count.gene==deggene_select],\
+            legend=False, color="k")
+        plt.ylabel("Expression profile of {}".format(deggene_select),fontdict={'size':14})
+        plt.tight_layout()
+        st.pyplot(gxpr_stim)
     else:
         st.write("No DEG FOUND increase the P-value")
-    _sampleSelect = sampleInfo[sampleInfo.condition==deg1_stim].sort_values(by='Age',ascending=False).set_index('sname')
-    df_count_PT = normCount[_sampleSelect.index].loc[deg_age_stimfilter.index]
-    st.caption("Heat map for selected DEG : {} [samples from Old (left) to Young (right)]".format(deg1_stim))
-    hm_ageG = sns.clustermap(df_count_PT.apply(sT.zscore,axis=1),cmap='RdBu_r',figsize=(6,10),vmin=-1.5,vmax=1.5,col_cluster=False,
-                cbar_kws={'label':'normalized experssion (z-score)'},cbar_pos=[1.,0.5,0.05,0.1])
-    st.pyplot(hm_ageG)
-    # boxplot for each gene
-    df_count = df_count_PT.unstack().reset_index().rename({0:'normExpr_val','Unnamed: 0':'gene','level_0':'sampleName'},axis=1)
-    df_count = df_count.set_index('sampleName').join(_sampleSelect[['Age','Age_Group']]).reset_index()
-    deggene_select = st.selectbox("Gene from DEGs to see as a boxplot on Normalized expression", df_count.gene.unique())
-    gxpr_stim, gbox_stim = plt.subplots()
-    PROPS = {
-    'boxprops':{'edgecolor':'None'},
-    }
-    sns.boxplot(x='Age_Group',y='normExpr_val',data=df_count[df_count.gene==deggene_select],\
-            palette=['#bdbdbd','#636363'], ax= gbox_stim, **PROPS)
-    sns.stripplot(x='Age_Group',y='normExpr_val',data=df_count[df_count.gene==deggene_select],\
-        legend=False, color="k")
-    plt.ylabel("Expression profile of {}".format(deggene_select),fontdict={'size':14})
-    plt.tight_layout()
-    st.pyplot(gxpr_stim)
 
     
 
