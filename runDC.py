@@ -14,7 +14,7 @@ st.set_option('deprecation.showPyplotGlobalUse', False)
 st.header("Transcriptomics of cDC with stimulation and adjuvent + stimulation")
 
 st.markdown("""
-* version = 0.1 [16 Feb 2023]
+* version = 0.3 [2 March 2023]
 * Latest : addition of FC list (downloadable) and DEG figure in Tab : Fold Change w.r.t Base
 * contact : taushif.khan@jax.org
 """)
