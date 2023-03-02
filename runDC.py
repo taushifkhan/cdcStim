@@ -148,7 +148,7 @@ with grpDEG:
         df_count_PT = normCount[_sampleSelect.index].loc[deg_age_stimfilter.index]
         st.subheader("Download expression profile:")
         flname = "normExpr_{}_{}_{}.csv".format(deg1_stim, pval_filter, df_count_PT.shape[0])
-        filelink = get_table_download_link(df_count_PT,flname)
+        filelink = get_table_download_link(df_count_PT.reset_index(),flname)
         st.markdown(filelink,unsafe_allow_html=True)
 
         st.caption("Heat map for selected DEG : {} [samples from Old (left) to Young (right)]".format(deg1_stim))
@@ -236,7 +236,7 @@ with foldchanges:
     * Total filtered gene set : {}""".format(stimcondition, minsampleSel, df_fcselelcted_mingene.shape))
     filenName_download = "sampleWiseDEG_{}_{}_{}.csv".format(stimcondition,minsampleSel,df_fcselelcted_mingene.shape[0])
     st.write("Clink the link to download selected file :{}".format(filenName_download))
-    filelink = get_table_download_link(df_fcselelcted_mingene,filenName_download)
+    filelink = get_table_download_link(df_fcselelcted_mingene.reset_index(),filenName_download)
     st.markdown(filelink,unsafe_allow_html=True)
 
     st.write(df_fcselelcted_mingene)
@@ -281,7 +281,7 @@ with degCompare:
     selectedDEGs = degStim_adju_sig[degStim_adju_sig["compare"]==stimselect].sort_values(by="pval")
     st.text("Number of GEGs for {} with P-value < {} = {}\nUse the link below to get selcted DEG list as CSV file".\
             format(stimselect ,pvalSlider, selectedDEGs.shape[0]))
-    filelink = get_table_download_link(selectedDEGs,"{}_{}.csv".format(stimselect,pvalSlider))
+    filelink = get_table_download_link(selectedDEGs.reset_index(),"{}_{}.csv".format(stimselect,pvalSlider))
     st.markdown(filelink,unsafe_allow_html=True)
 
     stim1 = stimselect.split("ASP1")[0][:-1]
